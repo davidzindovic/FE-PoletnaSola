@@ -38,6 +38,8 @@ float BRIGHTNESS = 0.0;
 float LOUDNESS = 0.0;
 uint16_t PEOPLE = 0;
 
+//################# SERVER ZADEVE ##################################
+
 AsyncWebServer server(80);
 
 // HTML and CSS for the web page
@@ -164,7 +166,7 @@ String processor(const String& var) {
   }
   return String();
 }
-
+//##########################################################
 
 
 uint16_t povprecja[ST_VELICIN][ST_VZORCEV]={0}; //tabela preteklih meritev, iz kjer računamo povprečje
@@ -204,6 +206,8 @@ LiquidCrystal_I2C lcd(0x27, lcdColumns, lcdRows);
 
 Adafruit_BME680 bme(BME_CS, BME_MOSI, BME_MISO, BME_SCK);
 
+
+//########################## SETUP #############################
 void setup() {
 
 pinMode(TIPKA_MODE,INPUT_PULLUP);
@@ -279,7 +283,9 @@ digitalWrite(D4,1);
 lcd.init();
 lcd.backlight();
 }
+// #################################################
 
+//######################## LOOP ############################
 void loop() {
 
 //spremenljivka za menjavanje kanala za prikaz
@@ -395,7 +401,12 @@ if(window_pointer)IzpisNaEkran(izbrana_velicina,povprecja[izbrana_velicina][kaza
 //for (uint8_t i=0;i<ST_VELICIN;i++){IzpisNaEkran(i,(uint16_t)i*4,0);delay(500);lcd.clear();}
 
 }
+//################## KONEC LOOPA ###########################
 
+
+//--------------------------FUNKCIJE:---------------------------------
+
+//#########################IZPIS NA EKRAN##############################
 
 //ta funkcija vzame index, kje se nahajajo stringi za izpis imen in enot veličin
 //ter vrednost za izpis (razberemo iz tabele preteklih meritev)
@@ -452,6 +463,10 @@ void IzpisNaEkran(uint8_t velicina_index, uint16_t vrednost,bool avrg)
   }
   
 }
+//#####################################################################
+
+
+//######################IZPIS SHRANJENIH MERITEV NA EKRAN####################### 
 
 //ta funkcija je namenjena izpisu iz tabele lastnih meritev (torej meritev,
 //ki jih je uporabnik shranil). Deluje podobno kot navadna funkcija
@@ -488,6 +503,11 @@ void IzpisLastnihMeritev(uint8_t SaveScrool_ptr)
   }
 }
 
+//#############################################################
+
+
+//######################### MERITVE ######################
+
 //ta funkcija prebere vse module in shrani meritve v tabelo
 //ter premakne kazalec na naslednje mesto za zapis meritev
 void meritve()
@@ -505,6 +525,9 @@ povprecja[6][kazalec]=bme.readAltitude(SEALEVELPRESSURE_HPA);
 kazalec++;
 if(kazalec>=ST_VZORCEV)kazalec=0;
 }
+//#######################################################
+
+//##################### HRUP ################################
 
 //ta funkcija odpre primeren tranzistor in
 //izmeri ter vrne vrednost na mikrofonu
@@ -515,6 +538,9 @@ uint16_t hrup()
   delay(10);
   return(analogRead(A0));
 }
+//#########################################################
+
+//############# OSVETLJENOST ##########################
 
 //ta funkcija odpre primeren tranzistor in
 //izmeri ter vrne vrednost na LDR uporu
@@ -525,6 +551,9 @@ uint16_t osvetljenost()
   delay(10);
   return(analogRead(A0));
 }
+//##################################################
+
+//################## TIPKE ##########################
 
 //ta funkcija vrne masko tipk, ki so bile pritisnjene
 uint8_t fronte_tipk()
@@ -542,6 +571,9 @@ tipke_prej=tipke;
 if(return_flag)return (0b111-((digitalRead(TIPKA_MODE)<<2)|(digitalRead(TIPKA_A)<<1)|(digitalRead(TIPKA_B)<<0)));
 else return 0;
 }
+//###################################################
+
+//############ WIFI ###########################
 
 //ta funkcija posodobi globalne spremenljivke, ki jih mikrokrmilnik
 //že sam od sebe meče v html stran, ki jo uporabnik odpre na telefonu
@@ -554,5 +586,5 @@ float TEMPERATURE = povprecja[3][kazalec];
 float PRESSURE = povprecja[4][kazalec];
 float GAS = povprecja[5][kazalec];
 float ALTITUDE = povprecja[6][kazalec];
-
 }
+//#################################################
