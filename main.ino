@@ -3,22 +3,168 @@
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
 #include "Adafruit_BME680.h"
+#include <Arduino.h>
+#include <ESP8266WiFi.h>
+#include <Hash.h>
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 
-#define BME_SCK D5
-#define BME_MISO D7
-#define BME_MOSI D6
-#define BME_CS D8
+#define BME_SCK D1//D5
+#define BME_MISO D2//D7
+#define BME_MOSI D3//D6
+#define BME_CS D4//D8
 #define SEALEVELPRESSURE_HPA (1013.25)
 
-#define TIPKA_MODE D0
-#define TIPKA_A D9
-#define TIPKA_B D10
+#define TIPKA_MODE D5//D0
+#define TIPKA_A D6//D9
+#define TIPKA_B D7//D10
 
 #define ST_VZORCEV 30
 #define ST_VELICIN 7
 #define PROSTOR_ZA_MOJE_MERITVE 10 //lahko pomni največ 10 meritev lastnih
 
-#define TIPKE_TIME_THRESHOLD 200 //v ms
+#define TIPKE_TIME_THRESHOLD 500 //v ms
+
+const char* ssid     = "FE-Summer-School-1";
+const char* password = "grasak1234";
+
+//html variables:
+float TEMPERATURE = 0.0;
+float HUMIDITY = 0.0;
+float PRESSURE = 0.0;
+float ALTITUDE = 0.0;
+float GAS = 0.0;
+float BRIGHTNESS = 0.0;
+float LOUDNESS = 0.0;
+uint16_t PEOPLE = 0;
+
+AsyncWebServer server(80);
+
+// HTML and CSS for the web page
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html {
+      font-family: Arial;
+      display: inline-block;
+      margin: 0px auto;
+      text-align: center;
+    }
+    h2 { font-size: 3.0rem; }
+    p { font-size: 3.0rem; margin: 20px 0; }
+    .units { font-size: 1.2rem; }
+    .dht-labels{
+      font-size: 1.5rem;
+      vertical-align: middle;
+      padding-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Summer school Measuring station</h2>
+  
+
+    <p>
+      <span class="dht-labels">Temperature</span> 
+      <span id="temperature">%TEMPERATURE%</span>
+      <sup class="units">&deg;C</sup>
+    </p>
+
+    <p>
+      <span class="dht-labels">Humidity</span>
+      <span id="humidity">%HUMIDITY%</span>
+      <sup class="units">%%</sup>
+    </p>
+
+    <p>
+      <span class="dht-labels">Pressure</span>
+      <span id="pressure">%PRESSURE%</span>
+      <sup class="units">hPa</sup>
+    </p>
+
+        <p>
+      <span class="dht-labels">Altitude</span>
+      <span id="altitude">%ALTITUDE%</span>
+      <sup class="units">m</sup>
+    </p>
+
+        <p>
+      <span class="dht-labels">Gas</span>
+      <span id="gas">%GAS%</span>
+      <sup class="units">kOhm</sup>
+    </p>
+
+        <p>
+      <span class="dht-labels">Brightness</span>
+      <span id="brightness">%BRIGHTNESS%</span>
+      <sup class="units">lux</sup>
+    </p>
+
+        <p>
+      <span class="dht-labels">Loudness</span>
+      <span id="loudness">%LOUDNESS%</span>
+      <sup class="units">Db</sup>
+    </p>
+       <p>
+      <span class="dht-labels">People</span>
+      <span id="people">%PEOPLE%</span>
+      <sup class="units"></sup>
+    </p>
+
+</body>
+<script>
+function updateData(id, endpoint) {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById(id).innerHTML = this.responseText;
+    }
+  };
+  xhttp.open("GET", endpoint, true);
+  xhttp.send();
+}
+
+setInterval(function () {
+  updateData("temperature", "/temperature");
+  updateData("humidity", "/humidity");
+  updateData("pressure", "/pressure");
+  updateData("altitude", "/altitude");
+  updateData("gas", "/gas");
+  updateData("brightness", "/brightness");
+  updateData("loudness", "/loudness");
+  updateData("people", "/people");
+}, 10000);
+</script>
+</html>)rawliteral";
+
+// Replaces placeholder with sensor values
+String processor(const String& var) {
+  if (var == "TEMPERATURE") {
+    return String(TEMPERATURE);
+  } else if (var == "HUMIDITY") {
+    return String(HUMIDITY);
+  } else if (var == "PRESSURE") {
+    return String(PRESSURE);
+  }else if (var == "ALTITUDE") {
+    return String(ALTITUDE);
+  }else if (var == "GAS") {
+    return String(GAS);
+  }
+  else if (var == "BRIGHTNESS") {
+    return String(BRIGHTNESS);
+  }
+  else if (var == "LOUDNESS") {
+    return String(LOUDNESS);
+  }
+  else if (var == "PEOPLE") {
+    return String(PEOPLE);
+  }
+  return String();
+}
+
 
 
 uint16_t povprecja[ST_VELICIN][ST_VZORCEV]={0}; //tabela preteklih meritev, iz kjer računamo povprečje
@@ -67,7 +213,59 @@ pinMode(TIPKA_B,INPUT_PULLUP);
 pinMode(D3,OUTPUT); //en izbor za mux
 pinMode(D4,OUTPUT); //drug izbor za mux (ni se mi dal negatorja dewat)
 pinMode(A0,INPUT);  //mam sam en adc
+
 Serial.begin(115200);
+WiFi.softAP(ssid, password);
+
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+
+  // Route for root / web page
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", index_html, processor);
+  });
+
+  // Route to get temperature
+  server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(TEMPERATURE).c_str());
+  });
+
+  // Route to get humidity
+  server.on("/humidity", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(HUMIDITY).c_str());
+  });
+
+  // Route to get pressure
+  server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(PRESSURE).c_str());
+  });
+
+    server.on("/altitude", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(ALTITUDE).c_str());
+  });
+
+    server.on("/gas", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(GAS).c_str());
+  });
+
+    server.on("/brightness", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(BRIGHTNESS).c_str());
+  });
+
+      server.on("/loudness", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(LOUDNESS).c_str());
+  });
+
+      server.on("/people", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(PEOPLE).c_str());
+  });
+
+  // Start server
+  server.begin();
+
+
+
 digitalWrite(D3,0);
 digitalWrite(D4,1);
 
@@ -111,12 +309,23 @@ if(TIPKE&mask_display_toggle)
   if(display_on)lcd.backlight();
   else lcd.noBacklight();
 }
+//če sočasno pritisnemo tipki MODE in B sočasno publishamo zadnje shranjene meritve vseh veličin
+//neposredno iz tabele iz katere tudi računamo povprečja (torej zadnji stolpec)
 else if((TIPKE&mask_wifi_publish)&&(window_pointer))
 { window_pointer=0;
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Publishing...");
-  
+
+  wifi_publish();
+  delay(100); //da zgleda proper
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Successfully");
+  lcd.setCursor(0,1);
+  lcd.print("published!");
+
+  /*
   if(wifi_publish(velicine[izbrana_velicina],povprecja[izbrana_velicina][kazalec]))
   {
   lcd.clear();
@@ -132,8 +341,11 @@ else if((TIPKE&mask_wifi_publish)&&(window_pointer))
   lcd.print("Failed to");
   lcd.setCursor(0,1);
   lcd.print("publish :(");
-  }
+  }*/
 }
+//če pritisnemo tipki A in B sočasno shranimo
+//meritev, ki je v trenutku pritiska prikazana na zaslonu
+// po uspešni shranitvi moramo pritisniti B za izhod
 else if((TIPKE&mask_save)&&(window_pointer))
 { window_pointer=0;
   moje_meritve_napisi[moje_meritve_pointer][0]=velicine[izbrana_velicina];//zapišem v tabelo "ime veličine"
@@ -149,10 +361,15 @@ else if((TIPKE&mask_save)&&(window_pointer))
   lcd.print("measurment!");
   
 }
+//ob pritisku na tipko B štejemo ljudi če smo na home screen
+//če nismo na home screen se vrnemo na home screen
 else if((TIPKE&mask_back_ok_button)&&(!window_pointer))
 {
-  window_pointer=1; //vrne na default window value, kar pomeni da smo na home screen
+  if(window_pointer)PEOPLE++;
+  else window_pointer=1; //vrne na default window value, kar pomeni da smo na home screen
 }
+//tukaj lahko prikazujemo lastne meritve s pritiskom tipke A, pri čemer se odpre ločeno okno
+//za izhod iz načina za ogled lastnih meritev moramo pritisniti tipko B
 else if((TIPKE&mask_save_scroll)&&(window_pointer))
 { static uint8_t save_scroll_pointer=0;
   window_pointer=0;
@@ -160,6 +377,9 @@ else if((TIPKE&mask_save_scroll)&&(window_pointer))
   if((((save_scroll_pointer-1)==moje_meritve_pointer)&&(!moje_meritve_ptr_of))||((save_scroll_pointer)==PROSTOR_ZA_MOJE_MERITVE))save_scroll_pointer=1; //resetam na 1
   IzpisLastnihMeritev(save_scroll_pointer);
 }
+//s pritiskom na tipko MODE na home screenu listamo po
+//prikazih trenutne vrednosti veličin (vsak pritisk nam prikaže naslednjo veličino)
+//prikaz se zgodi izven if-a
 else if((TIPKE&mask_mode_scroll)&&(window_pointer))
 {
   izbrana_velicina++;
@@ -177,7 +397,11 @@ if(window_pointer)IzpisNaEkran(izbrana_velicina,povprecja[izbrana_velicina][kaza
 }
 
 
-//velicina je pozicija velicine v arrayu, ne pa lastnih meritev
+//ta funkcija vzame index, kje se nahajajo stringi za izpis imen in enot veličin
+//ter vrednost za izpis (razberemo iz tabele preteklih meritev)
+//dodana je opcija za povprečenje, ki je trenutno vedno on v glavnem loopu
+//zaradi pomanjkanja kombinacij gumbov lol
+//aja drgač pa zapiše stvari na ekran talele funkcija
 void IzpisNaEkran(uint8_t velicina_index, uint16_t vrednost,bool avrg)
 { lcd.clear();
   uint8_t unit_rezerva; //+1 za presledek med vrednostjo in enoto
@@ -229,6 +453,9 @@ void IzpisNaEkran(uint8_t velicina_index, uint16_t vrednost,bool avrg)
   
 }
 
+//ta funkcija je namenjena izpisu iz tabele lastnih meritev (torej meritev,
+//ki jih je uporabnik shranil). Deluje podobno kot navadna funkcija
+//IzpisNaEkran, vendar tukaj drugače formatiram zamike in izpišem minuli čas
 void IzpisLastnihMeritev(uint8_t SaveScrool_ptr)
 {
   lcd.clear();
@@ -261,7 +488,8 @@ void IzpisLastnihMeritev(uint8_t SaveScrool_ptr)
   }
 }
 
-
+//ta funkcija prebere vse module in shrani meritve v tabelo
+//ter premakne kazalec na naslednje mesto za zapis meritev
 void meritve()
 {
 
@@ -278,6 +506,8 @@ kazalec++;
 if(kazalec>=ST_VZORCEV)kazalec=0;
 }
 
+//ta funkcija odpre primeren tranzistor in
+//izmeri ter vrne vrednost na mikrofonu
 uint16_t hrup()
 {
   digitalWrite(D3,0);
@@ -286,6 +516,8 @@ uint16_t hrup()
   return(analogRead(A0));
 }
 
+//ta funkcija odpre primeren tranzistor in
+//izmeri ter vrne vrednost na LDR uporu
 uint16_t osvetljenost()
 {
   digitalWrite(D4,0);
@@ -294,28 +526,33 @@ uint16_t osvetljenost()
   return(analogRead(A0));
 }
 
+//ta funkcija vrne masko tipk, ki so bile pritisnjene
 uint8_t fronte_tipk()
 {
 static uint8_t tipke_cajt=0;
 bool return_flag=0;
 static uint8_t tipke_prej;
 
-uint8_t tipke=(digitalRead(TIPKA_MODE)<<2)||(digitalRead(TIPKA_A)<<1)||(digitalRead(TIPKA_B)<<0);
+uint8_t tipke=(digitalRead(TIPKA_MODE)<<2)|(digitalRead(TIPKA_A)<<1)|(digitalRead(TIPKA_B)<<0);
 
-if((tipke_prej!=tipke)&&((millis()-tipke_cajt)>TIPKE_TIME_THRESHOLD)){return_flag=1;tipke_cajt=millis();}
+if((tipke_prej>tipke)&&((millis()-tipke_cajt)>TIPKE_TIME_THRESHOLD)){return_flag=1;tipke_cajt=millis();}
 
 tipke_prej=tipke;
 
-if(return_flag)return ~(tipke_prej&tipke);
+if(return_flag)return (0b111-((digitalRead(TIPKA_MODE)<<2)|(digitalRead(TIPKA_A)<<1)|(digitalRead(TIPKA_B)<<0)));
 else return 0;
 }
 
-bool wifi_publish(String velicina_text,uint16_t velicina_vrednost)
+//ta funkcija posodobi globalne spremenljivke, ki jih mikrokrmilnik
+//že sam od sebe meče v html stran, ki jo uporabnik odpre na telefonu
+void wifi_publish() 
 {
-  
-}
+float LOUDNESS = povprecja[0][kazalec];
+float HUMIDITY = povprecja[1][kazalec];
+float BRIGHTNESS = povprecja[2][kazalec];
+float TEMPERATURE = povprecja[3][kazalec];
+float PRESSURE = povprecja[4][kazalec];
+float GAS = povprecja[5][kazalec];
+float ALTITUDE = povprecja[6][kazalec];
 
-void tetris()
-{
-  
 }
