@@ -29,8 +29,9 @@
 
 #define TIPKE_TIME_THRESHOLD 1000 //v ms
 #define LCD_REFRESH_TIME 50
+#define MERITVE_REFRESH_TIME 100
 
-#define DEBUG 1
+#define DEBUG 0
 
 const char* ssid     = "FE-Summer-School-1";
 const char* password = "grasak1234";
@@ -275,7 +276,7 @@ WiFi.softAP(ssid, password);
   // Start server
   server.begin();
 
-
+while(!bme.begin()){Serial.println("CAKAM");}
 
   // Set up oversampling and filter initialization
   bme.setTemperatureOversampling(BME680_OS_8X);
@@ -308,6 +309,7 @@ static uint8_t mask_save=0b011;
 static uint8_t mask_wifi_publish=0b110; //poskusi se dat na wifi in publishat
 static uint8_t mask_display_toggle=0b101;
 
+static uint32_t cajt_zadnje_meritve=0;
 
 uint8_t TIPKE=fronte_tipk();
 
@@ -434,11 +436,14 @@ else if((TIPKE==mask_mode_scroll)&&(window_pointer))
 
 
 //izven checkanja tipk:
+if((millis()-cajt_zadnje_meritve)>=MERITVE_REFRESH_TIME);
+{
 meritve();
+cajt_zadnje_meritve=millis();
+}
+
 if((izbrana_velicina==7) && (window_pointer))IzpisNaEkran(izbrana_velicina,PEOPLE,1);
 else if(window_pointer)IzpisNaEkran(izbrana_velicina,povprecja[izbrana_velicina][kazalec],1); //povprecje skos izpisuje ker mi je zmanjkal tipk lol
-
-
 
 //test izpisa arraya velicin (samo napisov):
 //for (uint8_t i=0;i<(ST_VELICIN-1);i++){IzpisNaEkran(i,(uint16_t)i,0);delay(500);lcd.clear();}
@@ -598,35 +603,35 @@ void IzpisLastnihMeritev(uint8_t SaveScrool_ptr)
 //ter premakne kazalec na naslednje mesto za zapis meritev
 void meritve()
 {
+static unsigned long endTime;
+static uint8_t kuadej = 0;
 
+
+if(kuadej)
+{
+if(bme.endReading()){
+
+Serial.println("NNNNNNNNN");
 povprecja[0][kazalec]=hrup();
-povprecja[1][kazalec]=bme.humidity;
 povprecja[2][kazalec]=osvetljenost();
+povprecja[1][kazalec]=bme.humidity;
 povprecja[3][kazalec]=bme.temperature;
 povprecja[4][kazalec]=bme.pressure/100.0;
 povprecja[5][kazalec]=bme.gas_resistance/1000.0;
 povprecja[6][kazalec]=bme.readAltitude(SEALEVELPRESSURE_HPA);
 
-if (bme.endReading()) {
-povprecja[1][kazalec]=bme.humidity;
-povprecja[3][kazalec]=bme.temperature;
-povprecja[4][kazalec]=bme.pressure/100.0;
-povprecja[5][kazalec]=bme.gas_resistance/1000.0;
-}
-//če bme680 še ni updejtal vzamemo prejšnjo meritev
-else
-{uint8_t kazalec_temp;
-  if(kazalec==0)kazalec_temp=ST_VZORCEV;
-  else kazalec_temp=kazalec;
-povprecja[1][kazalec_temp-1]=bme.humidity;
-povprecja[3][kazalec_temp-1]=bme.temperature;
-povprecja[4][kazalec_temp-1]=bme.pressure/100.0;
-povprecja[5][kazalec_temp-1]=bme.gas_resistance/1000.0;
-}
-
-
 kazalec++;
 if(kazalec>=ST_VZORCEV)kazalec=0;
+kuadej=0;
+}
+}
+
+if(!kuadej)
+{
+  while(endTime==0)endTime = bme.beginReading();
+}
+else kuadej=1;
+
 }
 //#######################################################
 
