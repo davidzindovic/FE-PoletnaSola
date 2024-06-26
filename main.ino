@@ -4,26 +4,33 @@
 #include <Adafruit_Sensor.h>
 #include "Adafruit_BME680.h"
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <Hash.h>
-#include <ESPAsyncTCP.h>
+#include <WiFi.h>
+//#include <Hash.h>
+#include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 
-#define BME_SCK D1//D5
-#define BME_MISO D2//D7
-#define BME_MOSI D3//D6
-#define BME_CS D4//D8
+#define BME_SCK 18
+#define BME_MISO 19
+#define BME_MOSI 23
+#define BME_CS 5
 #define SEALEVELPRESSURE_HPA (1013.25)
 
-#define TIPKA_MODE D5//D0
-#define TIPKA_A D6//D9
-#define TIPKA_B D7//D10
+#define TIPKA_MODE 27
+#define TIPKA_A 26
+#define TIPKA_B 25
+
+#define TR_LDR_ON 14
+#define TR_MIC_ON 12
+#define ESP_ANALOG 36
 
 #define ST_VZORCEV 30
-#define ST_VELICIN 7
+#define ST_VELICIN 8 //7 v tabeli, 8. so PEOPLE
 #define PROSTOR_ZA_MOJE_MERITVE 10 //lahko pomni največ 10 meritev lastnih
 
-#define TIPKE_TIME_THRESHOLD 500 //v ms
+#define TIPKE_TIME_THRESHOLD 1000 //v ms
+#define LCD_REFRESH_TIME 50
+
+#define DEBUG 1
 
 const char* ssid     = "FE-Summer-School-1";
 const char* password = "grasak1234";
@@ -66,7 +73,7 @@ const char index_html[] PROGMEM = R"rawliteral(
   </style>
 </head>
 <body>
-  <h2>Summer school Measuring station</h2>
+  <h2>Summer school Measuring station 1</h2>
   
 
     <p>
@@ -169,12 +176,12 @@ String processor(const String& var) {
 //##########################################################
 
 
-uint16_t povprecja[ST_VELICIN][ST_VZORCEV]={0}; //tabela preteklih meritev, iz kjer računamo povprečje
+uint16_t povprecja[ST_VELICIN-1][ST_VZORCEV]={0}; //tabela preteklih meritev, iz kjer računamo povprečje
 uint32_t moje_meritve_vrednosti[PROSTOR_ZA_MOJE_MERITVE][2];//hrani v prvem stolpcu izmerjeno vrednost, v drugem cas zadnje meritve
 String moje_meritve_napisi[PROSTOR_ZA_MOJE_MERITVE][2];    //hrani v prvem stolpcu ime velicine, v drugem pa enote
 
-String velicine[ST_VELICIN]={"Loudness: ","Humidity: ","Bright: ","Temperature: ","Pressure: ","Gas: ","Altitude: "};
-String enote[ST_VELICIN]={"Db","%","lx","C","hPa","k","m"};
+String velicine[ST_VELICIN-1]={"Loudness: ","Humidity: ","Bright: ","Temp: ","Pressure: ","Gas: ","Altitude: "};
+String enote[ST_VELICIN-1]={"Db","%","lx","C","hPa","k","m"};
 
 uint8_t kazalec=0; //da vem katera meritva je bila zadnja
 
@@ -214,11 +221,11 @@ pinMode(TIPKA_MODE,INPUT_PULLUP);
 pinMode(TIPKA_A,INPUT_PULLUP);
 pinMode(TIPKA_B,INPUT_PULLUP);
 
-pinMode(D3,OUTPUT); //en izbor za mux
-pinMode(D4,OUTPUT); //drug izbor za mux (ni se mi dal negatorja dewat)
-pinMode(A0,INPUT);  //mam sam en adc
+pinMode(TR_LDR_ON,OUTPUT); //en izbor za mux
+pinMode(TR_MIC_ON,OUTPUT); //drug izbor za mux (ni se mi dal negatorja dewat)
+pinMode(ESP_ANALOG,INPUT);  //mam sam en adc
 
-Serial.begin(115200);
+Serial.begin(115200);delay(1000);
 WiFi.softAP(ssid, password);
 
   IPAddress IP = WiFi.softAPIP();
@@ -270,9 +277,6 @@ WiFi.softAP(ssid, password);
 
 
 
-digitalWrite(D3,0);
-digitalWrite(D4,1);
-
   // Set up oversampling and filter initialization
   bme.setTemperatureOversampling(BME680_OS_8X);
   bme.setHumidityOversampling(BME680_OS_2X);
@@ -306,10 +310,22 @@ static uint8_t mask_display_toggle=0b101;
 
 
 uint8_t TIPKE=fronte_tipk();
+
+#if DEBUG==2
+
+Serial.print("TIPKE: ");
+Serial.println(TIPKE,BIN);
+
+#endif
+
 //da ne gledamo pogojev če ni treba:
 if(TIPKE>0){
-if(TIPKE&mask_display_toggle)
-{
+if(TIPKE==mask_display_toggle)
+{ 
+  #if DEBUG
+  Serial.println("DISPLAY BACKLIGHT TOGGLE");
+  #endif
+  
   static bool display_on=1;
   display_on=!display_on;
   if(display_on)lcd.backlight();
@@ -317,8 +333,13 @@ if(TIPKE&mask_display_toggle)
 }
 //če sočasno pritisnemo tipki MODE in B sočasno publishamo zadnje shranjene meritve vseh veličin
 //neposredno iz tabele iz katere tudi računamo povprečja (torej zadnji stolpec)
-else if((TIPKE&mask_wifi_publish)&&(window_pointer))
-{ window_pointer=0;
+else if((TIPKE==mask_wifi_publish)&&(window_pointer))
+{ 
+  #if DEBUG
+  Serial.println("WIFI PUBLISH");
+  #endif
+   
+  window_pointer=0;
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Publishing...");
@@ -331,29 +352,34 @@ else if((TIPKE&mask_wifi_publish)&&(window_pointer))
   lcd.setCursor(0,1);
   lcd.print("published!");
 
-  /*
-  if(wifi_publish(velicine[izbrana_velicina],povprecja[izbrana_velicina][kazalec]))
-  {
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print("Successfully");
-  lcd.setCursor(0,1);
-  lcd.print("published!");
-  }
-  else
-  {
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print("Failed to");
-  lcd.setCursor(0,1);
-  lcd.print("publish :(");
-  }*/
+  
+  //if(wifi_publish(velicine[izbrana_velicina],povprecja[izbrana_velicina][kazalec]))
+  //{
+  //lcd.clear();
+  //lcd.setCursor(0,0);
+  //lcd.print("Successfully");
+  //lcd.setCursor(0,1);
+  //lcd.print("published!");
+  //}
+  //else
+  //{
+  //lcd.clear();
+  //lcd.setCursor(0,0);
+  //lcd.print("Failed to");
+  //lcd.setCursor(0,1);
+  //lcd.print("publish :(");
+  //}
 }
 //če pritisnemo tipki A in B sočasno shranimo
 //meritev, ki je v trenutku pritiska prikazana na zaslonu
 // po uspešni shranitvi moramo pritisniti B za izhod
-else if((TIPKE&mask_save)&&(window_pointer))
-{ window_pointer=0;
+else if((TIPKE==mask_save)&&(window_pointer))
+{ 
+  #if DEBUG
+  Serial.println("SHRANJEVANJE");
+  #endif
+   
+  window_pointer=0;
   moje_meritve_napisi[moje_meritve_pointer][0]=velicine[izbrana_velicina];//zapišem v tabelo "ime veličine"
   moje_meritve_vrednosti[moje_meritve_pointer][0]=povprecja[izbrana_velicina][kazalec]; //prepišem zadnjo vrednost
   moje_meritve_napisi[moje_meritve_pointer][1]=enote[izbrana_velicina];
@@ -369,15 +395,24 @@ else if((TIPKE&mask_save)&&(window_pointer))
 }
 //ob pritisku na tipko B štejemo ljudi če smo na home screen
 //če nismo na home screen se vrnemo na home screen
-else if((TIPKE&mask_back_ok_button)&&(!window_pointer))
-{
+else if((TIPKE==mask_back_ok_button))
+{ 
+  #if DEBUG
+  Serial.println("ČLOVEK++");
+  #endif
+  
   if(window_pointer)PEOPLE++;
   else window_pointer=1; //vrne na default window value, kar pomeni da smo na home screen
 }
 //tukaj lahko prikazujemo lastne meritve s pritiskom tipke A, pri čemer se odpre ločeno okno
 //za izhod iz načina za ogled lastnih meritev moramo pritisniti tipko B
-else if((TIPKE&mask_save_scroll)&&(window_pointer))
-{ static uint8_t save_scroll_pointer=0;
+else if((TIPKE==mask_save_scroll)&&(window_pointer))
+{ 
+  #if DEBUG
+  Serial.println("LISTAM SAVE");
+  #endif
+   
+  static uint8_t save_scroll_pointer=0;
   window_pointer=0;
   save_scroll_pointer++; //tukaj imam 1, v funkciji zbije na 0 (torej -1)
   if((((save_scroll_pointer-1)==moje_meritve_pointer)&&(!moje_meritve_ptr_of))||((save_scroll_pointer)==PROSTOR_ZA_MOJE_MERITVE))save_scroll_pointer=1; //resetam na 1
@@ -386,19 +421,36 @@ else if((TIPKE&mask_save_scroll)&&(window_pointer))
 //s pritiskom na tipko MODE na home screenu listamo po
 //prikazih trenutne vrednosti veličin (vsak pritisk nam prikaže naslednjo veličino)
 //prikaz se zgodi izven if-a
-else if((TIPKE&mask_mode_scroll)&&(window_pointer))
-{
+else if((TIPKE==mask_mode_scroll)&&(window_pointer))
+{ 
+  #if DEBUG
+  Serial.println("SCROLL");
+  #endif
+  
   izbrana_velicina++;
   if(izbrana_velicina==ST_VELICIN)izbrana_velicina=0;
 }
 }
 
+
 //izven checkanja tipk:
-if(window_pointer)IzpisNaEkran(izbrana_velicina,povprecja[izbrana_velicina][kazalec],1); //povprecje skos izpisuje ker mi je zmanjkal tipk lol
+meritve();
+if((izbrana_velicina==7) && (window_pointer))IzpisNaEkran(izbrana_velicina,PEOPLE,1);
+else if(window_pointer)IzpisNaEkran(izbrana_velicina,povprecja[izbrana_velicina][kazalec],1); //povprecje skos izpisuje ker mi je zmanjkal tipk lol
+
 
 
 //test izpisa arraya velicin (samo napisov):
-//for (uint8_t i=0;i<ST_VELICIN;i++){IzpisNaEkran(i,(uint16_t)i*4,0);delay(500);lcd.clear();}
+//for (uint8_t i=0;i<(ST_VELICIN-1);i++){IzpisNaEkran(i,(uint16_t)i,0);delay(500);lcd.clear();}
+
+//test analognih velicin:
+//Serial.print("LDR: ");Serial.print(osvetljenost());
+//delay(100);
+//Serial.print("  |  MIC: ");Serial.println(hrup());
+//delay(100);
+
+//test tipkovnice:
+//Serial.println(fronte_tipk(),BIN);delay(200);
 
 }
 //################## KONEC LOOPA ###########################
@@ -414,7 +466,33 @@ if(window_pointer)IzpisNaEkran(izbrana_velicina,povprecja[izbrana_velicina][kaza
 //zaradi pomanjkanja kombinacij gumbov lol
 //aja drgač pa zapiše stvari na ekran talele funkcija
 void IzpisNaEkran(uint8_t velicina_index, uint16_t vrednost,bool avrg)
-{ lcd.clear();
+{ 
+static uint32_t zadnji_refresh=0;
+
+#if DEBUG==2
+Serial.print("IZPIS NA EKRAN | INDEX & VREDNOST: ");
+Serial.print(velicina_index);
+Serial.print("  ");
+Serial.println(vrednost);
+#endif
+
+//delay(80);
+
+if((millis()-zadnji_refresh)>=LCD_REFRESH_TIME)
+{
+lcd.clear();
+
+if(velicina_index==7)
+{
+  lcd.setCursor(0, 0);
+  lcd.print("NUMBER OF");
+  lcd.setCursor(0, 1);
+  lcd.print("PEOPLE");
+  lcd.setCursor(16-(vrednost>=0)-(vrednost>9)-(vrednost>99),0); //rezerviramo dovolj števk
+  lcd.print(vrednost);
+}
+
+else{
   uint8_t unit_rezerva; //+1 za presledek med vrednostjo in enoto
   if((velicina_index==0) || (velicina_index==2) || (velicina_index==3)||(velicina_index==5)) unit_rezerva=2+1;
   else if(velicina_index==4)unit_rezerva=3+1;
@@ -446,22 +524,30 @@ void IzpisNaEkran(uint8_t velicina_index, uint16_t vrednost,bool avrg)
   if(avrg)
   {
     uint8_t index=0;
+    uint8_t nenicelni_index=0;
     uint32_t povprecje=0;
 
-    while(povprecja[velicina_index][index]==0 || index>=ST_VZORCEV)
+    while(index<ST_VZORCEV)
     {
+      
+      if(povprecja[velicina_index][index]!=0)
+      {
       povprecje+=povprecja[velicina_index][index];
+      nenicelni_index++;
+      }
       index++;
     }
-    povprecje/=index;
+    povprecje/=((nenicelni_index+1)*(nenicelni_index==0)+(nenicelni_index)*(nenicelni_index>0));
     lcd.setCursor(0,1);
     lcd.print("Average: ");
     lcd.setCursor(11,1);
     lcd.print(povprecje);
-    lcd.setCursor(11+povprecje>=0+povprecje>9+povprecje>99+1,1);
-    lcd.print(enote[velicina_index]);
+    //lcd.setCursor(11+povprecje>=0+povprecje>9+povprecje>99+1,1);
+    //lcd.print(enote[velicina_index]);
   }
-  
+}
+zadnji_refresh=millis(); 
+}
 }
 //#####################################################################
 
@@ -514,12 +600,29 @@ void meritve()
 {
 
 povprecja[0][kazalec]=hrup();
-povprecja[1][kazalec]= bme.humidity;
+povprecja[1][kazalec]=bme.humidity;
 povprecja[2][kazalec]=osvetljenost();
 povprecja[3][kazalec]=bme.temperature;
 povprecja[4][kazalec]=bme.pressure/100.0;
 povprecja[5][kazalec]=bme.gas_resistance/1000.0;
 povprecja[6][kazalec]=bme.readAltitude(SEALEVELPRESSURE_HPA);
+
+if (bme.endReading()) {
+povprecja[1][kazalec]=bme.humidity;
+povprecja[3][kazalec]=bme.temperature;
+povprecja[4][kazalec]=bme.pressure/100.0;
+povprecja[5][kazalec]=bme.gas_resistance/1000.0;
+}
+//če bme680 še ni updejtal vzamemo prejšnjo meritev
+else
+{uint8_t kazalec_temp;
+  if(kazalec==0)kazalec_temp=ST_VZORCEV;
+  else kazalec_temp=kazalec;
+povprecja[1][kazalec_temp-1]=bme.humidity;
+povprecja[3][kazalec_temp-1]=bme.temperature;
+povprecja[4][kazalec_temp-1]=bme.pressure/100.0;
+povprecja[5][kazalec_temp-1]=bme.gas_resistance/1000.0;
+}
 
 
 kazalec++;
@@ -533,10 +636,10 @@ if(kazalec>=ST_VZORCEV)kazalec=0;
 //izmeri ter vrne vrednost na mikrofonu
 uint16_t hrup()
 {
-  digitalWrite(D3,0);
-  digitalWrite(D4,1);
+  digitalWrite(TR_LDR_ON,0);
+  digitalWrite(TR_MIC_ON,1);
   delay(10);
-  return(analogRead(A0));
+  return(analogRead(ESP_ANALOG));
 }
 //#########################################################
 
@@ -546,10 +649,10 @@ uint16_t hrup()
 //izmeri ter vrne vrednost na LDR uporu
 uint16_t osvetljenost()
 {
-  digitalWrite(D4,0);
-  digitalWrite(D3,1);
+  digitalWrite(TR_MIC_ON,0);
+  digitalWrite(TR_LDR_ON,1);
   delay(10);
-  return(analogRead(A0));
+  return(analogRead(ESP_ANALOG));
 }
 //##################################################
 
