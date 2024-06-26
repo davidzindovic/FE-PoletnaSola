@@ -27,9 +27,9 @@
 #define ST_VELICIN 8 //7 v tabeli, 8. so PEOPLE
 #define PROSTOR_ZA_MOJE_MERITVE 10 //lahko pomni največ 10 meritev lastnih
 
-#define TIPKE_TIME_THRESHOLD 1000 //v ms
+#define TIPKE_TIME_THRESHOLD 200 //v ms
 #define LCD_REFRESH_TIME 50
-#define MERITVE_REFRESH_TIME 100
+#define MERITVE_REFRESH_TIME 1000
 
 #define DEBUG 0
 
@@ -182,7 +182,7 @@ uint32_t moje_meritve_vrednosti[PROSTOR_ZA_MOJE_MERITVE][2];//hrani v prvem stol
 String moje_meritve_napisi[PROSTOR_ZA_MOJE_MERITVE][2];    //hrani v prvem stolpcu ime velicine, v drugem pa enote
 
 String velicine[ST_VELICIN-1]={"Loudness: ","Humidity: ","Bright: ","Temp: ","Pressure: ","Gas: ","Altitude: "};
-String enote[ST_VELICIN-1]={"Db","%","lx","C","hPa","k","m"};
+String enote[ST_VELICIN-1]={"dB","%","lx","C","hPa","k","m"};
 
 uint8_t kazalec=0; //da vem katera meritva je bila zadnja
 
@@ -300,6 +300,7 @@ static bool window_pointer=1;//dokler je 1 lahko greš v mode
 static uint8_t izbrana_velicina=0;
 static uint8_t moje_meritve_pointer=0;
 static bool moje_meritve_ptr_of=0; //za spremljanje ponovnega poteka
+static bool moje_meritve_prioriteta=0;
 
 //maske za mode:
 static uint8_t mask_mode_scroll=0b100;
@@ -383,7 +384,7 @@ else if((TIPKE==mask_save)&&(window_pointer))
    
   window_pointer=0;
   moje_meritve_napisi[moje_meritve_pointer][0]=velicine[izbrana_velicina];//zapišem v tabelo "ime veličine"
-  moje_meritve_vrednosti[moje_meritve_pointer][0]=povprecja[izbrana_velicina][kazalec]; //prepišem zadnjo vrednost
+  moje_meritve_vrednosti[moje_meritve_pointer][0]=povprecja[izbrana_velicina][(kazalec-1)*(kazalec>0)+(ST_VZORCEV-1)*(kazalec==0)]; //prepišem zadnjo vrednost
   moje_meritve_napisi[moje_meritve_pointer][1]=enote[izbrana_velicina];
   moje_meritve_vrednosti[moje_meritve_pointer][1]=millis();
   moje_meritve_pointer++;
@@ -405,20 +406,29 @@ else if((TIPKE==mask_back_ok_button))
   
   if(window_pointer)PEOPLE++;
   else window_pointer=1; //vrne na default window value, kar pomeni da smo na home screen
+
+  if(moje_meritve_prioriteta)moje_meritve_prioriteta=0;
 }
 //tukaj lahko prikazujemo lastne meritve s pritiskom tipke A, pri čemer se odpre ločeno okno
 //za izhod iz načina za ogled lastnih meritev moramo pritisniti tipko B
-else if((TIPKE==mask_save_scroll)&&(window_pointer))
+else if((TIPKE==mask_save_scroll)&&(window_pointer)||(TIPKE==mask_save_scroll)&&(moje_meritve_prioriteta))
 { 
   #if DEBUG
   Serial.println("LISTAM SAVE");
   #endif
-   
+
   static uint8_t save_scroll_pointer=0;
-  window_pointer=0;
-  save_scroll_pointer++; //tukaj imam 1, v funkciji zbije na 0 (torej -1)
-  if((((save_scroll_pointer-1)==moje_meritve_pointer)&&(!moje_meritve_ptr_of))||((save_scroll_pointer)==PROSTOR_ZA_MOJE_MERITVE))save_scroll_pointer=1; //resetam na 1
-  IzpisLastnihMeritev(save_scroll_pointer);
+  if(!moje_meritve_prioriteta)
+  {
+    save_scroll_pointer=0;//ob ponovnem vstopu resetiram pointer za moj save
+    moje_meritve_prioriteta=1;//postavimo prioriteto da smo v posebnem sub meniju
+    window_pointer=0;
+  }
+//if((!(moje_meritve_pointer==0))||(moje_meritve_ptr_of))IzpisLastnihMeritev(save_scroll_pointer);
+
+  //če je pointer na koncu seznama ali pa na koncu polnih elementov preprečimo inkrementiranje
+  if((((save_scroll_pointer)==moje_meritve_pointer)&&(!moje_meritve_ptr_of))||((save_scroll_pointer)==PROSTOR_ZA_MOJE_MERITVE)){}
+  else {IzpisLastnihMeritev(save_scroll_pointer);save_scroll_pointer++;}
 }
 //s pritiskom na tipko MODE na home screenu listamo po
 //prikazih trenutne vrednosti veličin (vsak pritisk nam prikaže naslednjo veličino)
@@ -436,14 +446,18 @@ else if((TIPKE==mask_mode_scroll)&&(window_pointer))
 
 
 //izven checkanja tipk:
-if((millis()-cajt_zadnje_meritve)>=MERITVE_REFRESH_TIME);
+
+if((millis()-cajt_zadnje_meritve)>MERITVE_REFRESH_TIME)
 {
+ 
 meritve();
 cajt_zadnje_meritve=millis();
 }
 
+//meritve();
+
 if((izbrana_velicina==7) && (window_pointer))IzpisNaEkran(izbrana_velicina,PEOPLE,1);
-else if(window_pointer)IzpisNaEkran(izbrana_velicina,povprecja[izbrana_velicina][kazalec],1); //povprecje skos izpisuje ker mi je zmanjkal tipk lol
+else if(window_pointer)IzpisNaEkran(izbrana_velicina,povprecja[izbrana_velicina][(kazalec-1)*(kazalec>0)+(ST_VZORCEV-1)*(kazalec==0)],1); //povprecje skos izpisuje ker mi je zmanjkal tipk lol
 
 //test izpisa arraya velicin (samo napisov):
 //for (uint8_t i=0;i<(ST_VELICIN-1);i++){IzpisNaEkran(i,(uint16_t)i,0);delay(500);lcd.clear();}
@@ -505,7 +519,7 @@ else{
   
   lcd.setCursor(0, 0);
   lcd.print(velicine[velicina_index]);
-  lcd.setCursor(16-(vrednost>=0)-(vrednost>9)-(vrednost>99)-unit_rezerva,0); //rezerviramo dovolj števk
+  lcd.setCursor(16-(vrednost>=0)-(vrednost>9)-(vrednost>99)-(vrednost>999)-unit_rezerva,0); //rezerviramo dovolj števk
   lcd.print(vrednost);
   lcd.setCursor(16-unit_rezerva+1,0); //-1 da bo presledek
 
@@ -553,6 +567,7 @@ else{
 }
 zadnji_refresh=millis(); 
 }
+
 }
 //#####################################################################
 
@@ -566,30 +581,32 @@ void IzpisLastnihMeritev(uint8_t SaveScrool_ptr)
 {
   lcd.clear();
   lcd.setCursor(0,0);
-  lcd.print(moje_meritve_napisi[SaveScrool_ptr-1][0]); //izpis imena velicine
-  lcd.setCursor(16-(moje_meritve_vrednosti[SaveScrool_ptr-1][0]>=0)-(moje_meritve_vrednosti[SaveScrool_ptr-1][0]>9)-(moje_meritve_vrednosti[SaveScrool_ptr-1][0]>99)-3,0); //rezerva je 3 ker je hPa najdaljša enota, jbg
-  lcd.print(moje_meritve_vrednosti[SaveScrool_ptr-1][0]); //izpis izmerjene vrednosti
+  lcd.print(moje_meritve_napisi[SaveScrool_ptr][0]); //izpis imena velicine
+  lcd.setCursor(16-(moje_meritve_vrednosti[SaveScrool_ptr][0]>=0)-(moje_meritve_vrednosti[SaveScrool_ptr][0]>9)-(moje_meritve_vrednosti[SaveScrool_ptr][0]>99)-(moje_meritve_vrednosti[SaveScrool_ptr][0]>999)-3,0); //rezerva je 3 ker je hPa najdaljša enota, jbg
+  lcd.print(moje_meritve_vrednosti[SaveScrool_ptr][0]); //izpis izmerjene vrednosti
   lcd.setCursor(16-3,0); //rezerva je 3 ker je hPa najdaljša enota, jbg
-  lcd.print(moje_meritve_napisi[SaveScrool_ptr-1][1]); //izpis enote
+  lcd.print(moje_meritve_napisi[SaveScrool_ptr][1]); //izpis enote
   lcd.setCursor(0,1);
-  lcd.print("Time past: ");
-  uint32_t sekunde=millis()/1000-moje_meritve_vrednosti[SaveScrool_ptr-1][1]/1000-moje_meritve_vrednosti[SaveScrool_ptr-1][1]/1000/60*60;
-  uint32_t minute=millis()/1000/60-moje_meritve_vrednosti[SaveScrool_ptr-1][1]/1000/60;
-  lcd.setCursor(11+4-(sekunde>9)-2*(minute>0)-(minute>9),1); //plac za minute rabi se enoto zato 2*
+  lcd.print("TimePast:");
+  uint32_t minute=millis()/1000/60-moje_meritve_vrednosti[SaveScrool_ptr][1]/1000/60;
+  uint32_t sekunde=millis()/1000-moje_meritve_vrednosti[SaveScrool_ptr][1]/1000-minute*60;
+  Serial.print("MINUTE: ");Serial.print(minute);
+  Serial.print("  | SEKUNDE: ");Serial.println(sekunde);
+  lcd.setCursor(10+4-(sekunde>9)-2*(minute>0)-(minute>9),1); //plac za minute rabi se enoto zato 2*
   if(minute>0)
   {
     lcd.print(minute);
-    lcd.setCursor(11+4-(sekunde>9)-2*(minute>0)-(minute>9)+(minute>0)+(minute>9),1);
+    lcd.setCursor(10+4-(sekunde>9)-2*(minute>0)-(minute>9)+(minute>0)+(minute>9),1);
     lcd.print("m");
-    lcd.setCursor(16-1-sekunde>9,1);
+    lcd.setCursor(15-1-(sekunde>9),1);
     lcd.print(sekunde);
-    lcd.setCursor(16,1);
+    lcd.setCursor(15,1);
     lcd.print("s");
   }
   else
   {
     lcd.print(sekunde);
-    lcd.setCursor(16,1);
+    lcd.setCursor(15,1);
     lcd.print("s");
   }
 }
@@ -603,12 +620,11 @@ void IzpisLastnihMeritev(uint8_t SaveScrool_ptr)
 //ter premakne kazalec na naslednje mesto za zapis meritev
 void meritve()
 {
-static unsigned long endTime;
-static uint8_t kuadej = 0;
-
+static bool kuadej = 0;
 
 if(kuadej)
 {
+
 if(bme.endReading()){
 
 Serial.println("NNNNNNNNN");
@@ -627,10 +643,14 @@ kuadej=0;
 }
 
 if(!kuadej)
-{
-  while(endTime==0)endTime = bme.beginReading();
+{ 
+  if(bme.beginReading()==0){}
+  else
+  {
+  kuadej=1;
+  }
 }
-else kuadej=1;
+
 
 }
 //#######################################################
@@ -687,12 +707,12 @@ else return 0;
 //že sam od sebe meče v html stran, ki jo uporabnik odpre na telefonu
 void wifi_publish() 
 {
-float LOUDNESS = povprecja[0][kazalec];
-float HUMIDITY = povprecja[1][kazalec];
-float BRIGHTNESS = povprecja[2][kazalec];
-float TEMPERATURE = povprecja[3][kazalec];
-float PRESSURE = povprecja[4][kazalec];
-float GAS = povprecja[5][kazalec];
-float ALTITUDE = povprecja[6][kazalec];
+LOUDNESS = povprecja[0][kazalec];
+HUMIDITY = povprecja[1][kazalec];
+BRIGHTNESS = povprecja[2][kazalec];
+TEMPERATURE = povprecja[3][kazalec];
+PRESSURE = povprecja[4][kazalec];
+GAS = povprecja[5][kazalec];
+ALTITUDE = povprecja[6][kazalec];
 }
 //#################################################
