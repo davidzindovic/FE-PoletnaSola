@@ -6,8 +6,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 //#include <Hash.h>
-//#include <AsyncTCP.h>
-//#include <ESPAsyncWebServer.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 
 #define BME_SCK 18
 #define BME_MISO 19
@@ -49,6 +49,109 @@ float LOUDNESS = 0.0;
 uint16_t PEOPLE = 0;
 
 //################# SERVER ZADEVE ##################################
+
+// HTML and CSS for the web page
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html {
+      font-family: Arial;
+      display: inline-block;
+      margin: 0px auto;
+      text-align: center;
+    }
+    h2 { font-size: 3.0rem; }
+    p { font-size: 3.0rem; margin: 20px 0; }
+    .units { font-size: 1.2rem; }
+    .dht-labels{
+      font-size: 1.5rem;
+      vertical-align: middle;
+      padding-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Summer school Measuring station 1</h2>
+  
+
+    <p>
+      <span class="dht-labels">Temperature</span> 
+      <span id="temperature">%TEMPERATURE%</span>
+      <sup class="units">&deg;C</sup>
+    </p>
+
+    <p>
+      <span class="dht-labels">Humidity</span>
+      <span id="humidity">%HUMIDITY%</span>
+      <sup class="units">%%</sup>
+    </p>
+
+    <p>
+      <span class="dht-labels">Pressure</span>
+      <span id="pressure">%PRESSURE%</span>
+      <sup class="units">hPa</sup>
+    </p>
+
+        <p>
+      <span class="dht-labels">Altitude</span>
+      <span id="altitude">%ALTITUDE%</span>
+      <sup class="units">m</sup>
+    </p>
+
+        <p>
+      <span class="dht-labels">Gas</span>
+      <span id="gas">%GAS%</span>
+      <sup class="units">kOhm</sup>
+    </p>
+
+        <p>
+      <span class="dht-labels">Brightness</span>
+      <span id="brightness">%BRIGHTNESS%</span>
+      <sup class="units">lux</sup>
+    </p>
+
+        <p>
+      <span class="dht-labels">Loudness</span>
+      <span id="loudness">%LOUDNESS%</span>
+      <sup class="units">Db</sup>
+    </p>
+       <p>
+      <span class="dht-labels">People</span>
+      <span id="people">%PEOPLE%</span>
+      <sup class="units"></sup>
+    </p>
+
+</body>
+<script>
+function updateData(id, endpoint) {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById(id).innerHTML = this.responseText;
+    }
+  };
+  xhttp.open("GET", endpoint, true);
+  xhttp.send();
+}
+
+setInterval(function () {
+  updateData("temperature", "/temperature");
+  updateData("humidity", "/humidity");
+  updateData("pressure", "/pressure");
+  updateData("altitude", "/altitude");
+  updateData("gas", "/gas");
+  updateData("brightness", "/brightness");
+  updateData("loudness", "/loudness");
+  updateData("people", "/people");
+}, 10000);
+</script>
+</html>)rawliteral";
+
+// Replaces placeholder with sensor values
+
 
 
 //##########################################################
@@ -562,130 +665,7 @@ void srvr()
 {
 AsyncWebServer server(80);
 
-// HTML and CSS for the web page
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    html {
-      font-family: Arial;
-      display: inline-block;
-      margin: 0px auto;
-      text-align: center;
-    }
-    h2 { font-size: 3.0rem; }
-    p { font-size: 3.0rem; margin: 20px 0; }
-    .units { font-size: 1.2rem; }
-    .dht-labels{
-      font-size: 1.5rem;
-      vertical-align: middle;
-      padding-bottom: 15px;
-    }
-  </style>
-</head>
-<body>
-  <h2>Summer school Measuring station 1</h2>
-  
 
-    <p>
-      <span class="dht-labels">Temperature</span> 
-      <span id="temperature">%TEMPERATURE%</span>
-      <sup class="units">&deg;C</sup>
-    </p>
-
-    <p>
-      <span class="dht-labels">Humidity</span>
-      <span id="humidity">%HUMIDITY%</span>
-      <sup class="units">%%</sup>
-    </p>
-
-    <p>
-      <span class="dht-labels">Pressure</span>
-      <span id="pressure">%PRESSURE%</span>
-      <sup class="units">hPa</sup>
-    </p>
-
-        <p>
-      <span class="dht-labels">Altitude</span>
-      <span id="altitude">%ALTITUDE%</span>
-      <sup class="units">m</sup>
-    </p>
-
-        <p>
-      <span class="dht-labels">Gas</span>
-      <span id="gas">%GAS%</span>
-      <sup class="units">kOhm</sup>
-    </p>
-
-        <p>
-      <span class="dht-labels">Brightness</span>
-      <span id="brightness">%BRIGHTNESS%</span>
-      <sup class="units">lux</sup>
-    </p>
-
-        <p>
-      <span class="dht-labels">Loudness</span>
-      <span id="loudness">%LOUDNESS%</span>
-      <sup class="units">Db</sup>
-    </p>
-       <p>
-      <span class="dht-labels">People</span>
-      <span id="people">%PEOPLE%</span>
-      <sup class="units"></sup>
-    </p>
-
-</body>
-<script>
-function updateData(id, endpoint) {
-  var xhttp = new XMLHttpRequest();
-  xhttp.onreadystatechange = function() {
-    if (this.readyState == 4 && this.status == 200) {
-      document.getElementById(id).innerHTML = this.responseText;
-    }
-  };
-  xhttp.open("GET", endpoint, true);
-  xhttp.send();
-}
-
-setInterval(function () {
-  updateData("temperature", "/temperature");
-  updateData("humidity", "/humidity");
-  updateData("pressure", "/pressure");
-  updateData("altitude", "/altitude");
-  updateData("gas", "/gas");
-  updateData("brightness", "/brightness");
-  updateData("loudness", "/loudness");
-  updateData("people", "/people");
-}, 10000);
-</script>
-</html>)rawliteral";
-
-// Replaces placeholder with sensor values
-String processor(const String& var) {
-  if (var == "TEMPERATURE") {
-    return String(TEMPERATURE);
-  } else if (var == "HUMIDITY") {
-    return String(HUMIDITY);
-  } else if (var == "PRESSURE") {
-    return String(PRESSURE);
-  }else if (var == "ALTITUDE") {
-    return String(ALTITUDE);
-  }else if (var == "GAS") {
-    return String(GAS);
-  }
-  else if (var == "BRIGHTNESS") {
-    return String(BRIGHTNESS);
-  }
-  else if (var == "LOUDNESS") {
-    return String(LOUDNESS);
-  }
-  else if (var == "PEOPLE") {
-    return String(PEOPLE);
-  }
-  return String();
-}
 
 WiFi.softAP(ssid, password);
 IPAddress IP = WiFi.softAPIP();
@@ -736,4 +716,29 @@ IPAddress IP = WiFi.softAPIP();
 
 
 
+}
+
+
+String processor(const String& var) {
+  if (var == "TEMPERATURE") {
+    return String(TEMPERATURE);
+  } else if (var == "HUMIDITY") {
+    return String(HUMIDITY);
+  } else if (var == "PRESSURE") {
+    return String(PRESSURE);
+  }else if (var == "ALTITUDE") {
+    return String(ALTITUDE);
+  }else if (var == "GAS") {
+    return String(GAS);
+  }
+  else if (var == "BRIGHTNESS") {
+    return String(BRIGHTNESS);
+  }
+  else if (var == "LOUDNESS") {
+    return String(LOUDNESS);
+  }
+  else if (var == "PEOPLE") {
+    return String(PEOPLE);
+  }
+  return String();
 }
