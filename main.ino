@@ -6,8 +6,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 //#include <Hash.h>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
+//#include <AsyncTCP.h>
+//#include <ESPAsyncWebServer.h>
 
 #define BME_SCK 18
 #define BME_MISO 19
@@ -22,6 +22,8 @@
 #define TR_LDR_ON 14
 #define TR_MIC_ON 12
 #define ESP_ANALOG 36
+
+#define WIFI_ON_PIN 4
 
 #define ST_VZORCEV 30
 #define ST_VELICIN 8 //7 v tabeli, 8. so PEOPLE
@@ -48,132 +50,7 @@ uint16_t PEOPLE = 0;
 
 //################# SERVER ZADEVE ##################################
 
-AsyncWebServer server(80);
 
-// HTML and CSS for the web page
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    html {
-      font-family: Arial;
-      display: inline-block;
-      margin: 0px auto;
-      text-align: center;
-    }
-    h2 { font-size: 3.0rem; }
-    p { font-size: 3.0rem; margin: 20px 0; }
-    .units { font-size: 1.2rem; }
-    .dht-labels{
-      font-size: 1.5rem;
-      vertical-align: middle;
-      padding-bottom: 15px;
-    }
-  </style>
-</head>
-<body>
-  <h2>Summer school Measuring station 1</h2>
-  
-
-    <p>
-      <span class="dht-labels">Temperature</span> 
-      <span id="temperature">%TEMPERATURE%</span>
-      <sup class="units">&deg;C</sup>
-    </p>
-
-    <p>
-      <span class="dht-labels">Humidity</span>
-      <span id="humidity">%HUMIDITY%</span>
-      <sup class="units">%%</sup>
-    </p>
-
-    <p>
-      <span class="dht-labels">Pressure</span>
-      <span id="pressure">%PRESSURE%</span>
-      <sup class="units">hPa</sup>
-    </p>
-
-        <p>
-      <span class="dht-labels">Altitude</span>
-      <span id="altitude">%ALTITUDE%</span>
-      <sup class="units">m</sup>
-    </p>
-
-        <p>
-      <span class="dht-labels">Gas</span>
-      <span id="gas">%GAS%</span>
-      <sup class="units">kOhm</sup>
-    </p>
-
-        <p>
-      <span class="dht-labels">Brightness</span>
-      <span id="brightness">%BRIGHTNESS%</span>
-      <sup class="units">lux</sup>
-    </p>
-
-        <p>
-      <span class="dht-labels">Loudness</span>
-      <span id="loudness">%LOUDNESS%</span>
-      <sup class="units">Db</sup>
-    </p>
-       <p>
-      <span class="dht-labels">People</span>
-      <span id="people">%PEOPLE%</span>
-      <sup class="units"></sup>
-    </p>
-
-</body>
-<script>
-function updateData(id, endpoint) {
-  var xhttp = new XMLHttpRequest();
-  xhttp.onreadystatechange = function() {
-    if (this.readyState == 4 && this.status == 200) {
-      document.getElementById(id).innerHTML = this.responseText;
-    }
-  };
-  xhttp.open("GET", endpoint, true);
-  xhttp.send();
-}
-
-setInterval(function () {
-  updateData("temperature", "/temperature");
-  updateData("humidity", "/humidity");
-  updateData("pressure", "/pressure");
-  updateData("altitude", "/altitude");
-  updateData("gas", "/gas");
-  updateData("brightness", "/brightness");
-  updateData("loudness", "/loudness");
-  updateData("people", "/people");
-}, 10000);
-</script>
-</html>)rawliteral";
-
-// Replaces placeholder with sensor values
-String processor(const String& var) {
-  if (var == "TEMPERATURE") {
-    return String(TEMPERATURE);
-  } else if (var == "HUMIDITY") {
-    return String(HUMIDITY);
-  } else if (var == "PRESSURE") {
-    return String(PRESSURE);
-  }else if (var == "ALTITUDE") {
-    return String(ALTITUDE);
-  }else if (var == "GAS") {
-    return String(GAS);
-  }
-  else if (var == "BRIGHTNESS") {
-    return String(BRIGHTNESS);
-  }
-  else if (var == "LOUDNESS") {
-    return String(LOUDNESS);
-  }
-  else if (var == "PEOPLE") {
-    return String(PEOPLE);
-  }
-  return String();
-}
 //##########################################################
 
 
@@ -226,57 +103,18 @@ pinMode(TR_LDR_ON,OUTPUT); //en izbor za mux
 pinMode(TR_MIC_ON,OUTPUT); //drug izbor za mux (ni se mi dal negatorja dewat)
 pinMode(ESP_ANALOG,INPUT);  //mam sam en adc
 
+#if DEBUG
 Serial.begin(115200);delay(1000);
-WiFi.softAP(ssid, password);
+#endif
 
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(IP);
+if(!digitalRead(WIFI_ON_PIN)){srvr();}
 
-  // Route for root / web page
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/html", index_html, processor);
-  });
+#if DEBUG
+Serial.print("AP IP address: ");
+Serial.println(IP);
+#endif
 
-  // Route to get temperature
-  server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/plain", String(TEMPERATURE).c_str());
-  });
-
-  // Route to get humidity
-  server.on("/humidity", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/plain", String(HUMIDITY).c_str());
-  });
-
-  // Route to get pressure
-  server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/plain", String(PRESSURE).c_str());
-  });
-
-    server.on("/altitude", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/plain", String(ALTITUDE).c_str());
-  });
-
-    server.on("/gas", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/plain", String(GAS).c_str());
-  });
-
-    server.on("/brightness", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/plain", String(BRIGHTNESS).c_str());
-  });
-
-      server.on("/loudness", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/plain", String(LOUDNESS).c_str());
-  });
-
-      server.on("/people", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/plain", String(PEOPLE).c_str());
-  });
-
-  // Start server
-  server.begin();
-
-while(!bme.begin()){Serial.println("CAKAM");}
+while(!bme.begin()){}
 
   // Set up oversampling and filter initialization
   bme.setTemperatureOversampling(BME680_OS_8X);
@@ -590,8 +428,10 @@ void IzpisLastnihMeritev(uint8_t SaveScrool_ptr)
   lcd.print("TimePast:");
   uint32_t minute=millis()/1000/60-moje_meritve_vrednosti[SaveScrool_ptr][1]/1000/60;
   uint32_t sekunde=millis()/1000-moje_meritve_vrednosti[SaveScrool_ptr][1]/1000-minute*60;
+  #if DEBUG
   Serial.print("MINUTE: ");Serial.print(minute);
   Serial.print("  | SEKUNDE: ");Serial.println(sekunde);
+  #endif
   lcd.setCursor(10+4-(sekunde>9)-2*(minute>0)-(minute>9),1); //plac za minute rabi se enoto zato 2*
   if(minute>0)
   {
@@ -626,8 +466,9 @@ if(kuadej)
 {
 
 if(bme.endReading()){
-
-Serial.println("NNNNNNNNN");
+#if DEBUG
+Serial.println("Nove Meritve!");
+#endif
 povprecja[0][kazalec]=hrup();
 povprecja[2][kazalec]=osvetljenost();
 povprecja[1][kazalec]=bme.humidity;
@@ -716,3 +557,183 @@ GAS = povprecja[5][kazalec];
 ALTITUDE = povprecja[6][kazalec];
 }
 //#################################################
+
+void srvr()
+{
+AsyncWebServer server(80);
+
+// HTML and CSS for the web page
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html {
+      font-family: Arial;
+      display: inline-block;
+      margin: 0px auto;
+      text-align: center;
+    }
+    h2 { font-size: 3.0rem; }
+    p { font-size: 3.0rem; margin: 20px 0; }
+    .units { font-size: 1.2rem; }
+    .dht-labels{
+      font-size: 1.5rem;
+      vertical-align: middle;
+      padding-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Summer school Measuring station 1</h2>
+  
+
+    <p>
+      <span class="dht-labels">Temperature</span> 
+      <span id="temperature">%TEMPERATURE%</span>
+      <sup class="units">&deg;C</sup>
+    </p>
+
+    <p>
+      <span class="dht-labels">Humidity</span>
+      <span id="humidity">%HUMIDITY%</span>
+      <sup class="units">%%</sup>
+    </p>
+
+    <p>
+      <span class="dht-labels">Pressure</span>
+      <span id="pressure">%PRESSURE%</span>
+      <sup class="units">hPa</sup>
+    </p>
+
+        <p>
+      <span class="dht-labels">Altitude</span>
+      <span id="altitude">%ALTITUDE%</span>
+      <sup class="units">m</sup>
+    </p>
+
+        <p>
+      <span class="dht-labels">Gas</span>
+      <span id="gas">%GAS%</span>
+      <sup class="units">kOhm</sup>
+    </p>
+
+        <p>
+      <span class="dht-labels">Brightness</span>
+      <span id="brightness">%BRIGHTNESS%</span>
+      <sup class="units">lux</sup>
+    </p>
+
+        <p>
+      <span class="dht-labels">Loudness</span>
+      <span id="loudness">%LOUDNESS%</span>
+      <sup class="units">Db</sup>
+    </p>
+       <p>
+      <span class="dht-labels">People</span>
+      <span id="people">%PEOPLE%</span>
+      <sup class="units"></sup>
+    </p>
+
+</body>
+<script>
+function updateData(id, endpoint) {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById(id).innerHTML = this.responseText;
+    }
+  };
+  xhttp.open("GET", endpoint, true);
+  xhttp.send();
+}
+
+setInterval(function () {
+  updateData("temperature", "/temperature");
+  updateData("humidity", "/humidity");
+  updateData("pressure", "/pressure");
+  updateData("altitude", "/altitude");
+  updateData("gas", "/gas");
+  updateData("brightness", "/brightness");
+  updateData("loudness", "/loudness");
+  updateData("people", "/people");
+}, 10000);
+</script>
+</html>)rawliteral";
+
+// Replaces placeholder with sensor values
+String processor(const String& var) {
+  if (var == "TEMPERATURE") {
+    return String(TEMPERATURE);
+  } else if (var == "HUMIDITY") {
+    return String(HUMIDITY);
+  } else if (var == "PRESSURE") {
+    return String(PRESSURE);
+  }else if (var == "ALTITUDE") {
+    return String(ALTITUDE);
+  }else if (var == "GAS") {
+    return String(GAS);
+  }
+  else if (var == "BRIGHTNESS") {
+    return String(BRIGHTNESS);
+  }
+  else if (var == "LOUDNESS") {
+    return String(LOUDNESS);
+  }
+  else if (var == "PEOPLE") {
+    return String(PEOPLE);
+  }
+  return String();
+}
+
+WiFi.softAP(ssid, password);
+IPAddress IP = WiFi.softAPIP();
+
+
+  // Route for root / web page
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", index_html, processor);
+  });
+
+  // Route to get temperature
+  server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(TEMPERATURE).c_str());
+  });
+
+  // Route to get humidity
+  server.on("/humidity", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(HUMIDITY).c_str());
+  });
+
+  // Route to get pressure
+  server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(PRESSURE).c_str());
+  });
+
+    server.on("/altitude", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(ALTITUDE).c_str());
+  });
+
+    server.on("/gas", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(GAS).c_str());
+  });
+
+    server.on("/brightness", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(BRIGHTNESS).c_str());
+  });
+
+      server.on("/loudness", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(LOUDNESS).c_str());
+  });
+
+      server.on("/people", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", String(PEOPLE).c_str());
+  });
+
+  // Start server
+  server.begin();
+
+
+
+}
