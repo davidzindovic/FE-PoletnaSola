@@ -19,9 +19,8 @@
 #define TIPKA_A 26
 #define TIPKA_B 25
 
-#define TR_LDR_ON 14
-#define TR_MIC_ON 12
-#define ESP_ANALOG 36
+#define LDR_ANALOG 36
+#define MIC_ANALOG 39
 
 #define WIFI_ON_PIN 4
 
@@ -30,10 +29,10 @@
 #define PROSTOR_ZA_MOJE_MERITVE 10 //lahko pomni največ 10 meritev lastnih
 
 #define TIPKE_TIME_THRESHOLD 200 //v ms
-#define LCD_REFRESH_TIME 50
+#define LCD_REFRESH_TIME 150
 #define MERITVE_REFRESH_TIME 1000
 
-#define DEBUG 0
+#define DEBUG 1
 
 const char* ssid     = "FE-Summer-School-1";
 const char* password = "grasak1234";
@@ -49,6 +48,9 @@ float LOUDNESS = 0.0;
 uint16_t PEOPLE = 0;
 
 //################# SERVER ZADEVE ##################################
+
+
+AsyncWebServer server(80);
 
 // HTML and CSS for the web page
 const char index_html[] PROGMEM = R"rawliteral(
@@ -150,10 +152,6 @@ setInterval(function () {
 </script>
 </html>)rawliteral";
 
-// Replaces placeholder with sensor values
-
-
-
 //##########################################################
 
 
@@ -202,20 +200,14 @@ pinMode(TIPKA_MODE,INPUT_PULLUP);
 pinMode(TIPKA_A,INPUT_PULLUP);
 pinMode(TIPKA_B,INPUT_PULLUP);
 
-pinMode(TR_LDR_ON,OUTPUT); //en izbor za mux
-pinMode(TR_MIC_ON,OUTPUT); //drug izbor za mux (ni se mi dal negatorja dewat)
-pinMode(ESP_ANALOG,INPUT);  //mam sam en adc
+pinMode(LDR_ANALOG,INPUT);
+pinMode(MIC_ANALOG,INPUT);
 
 #if DEBUG
 Serial.begin(115200);delay(1000);
 #endif
 
 if(!digitalRead(WIFI_ON_PIN)){srvr();}
-
-#if DEBUG
-Serial.print("AP IP address: ");
-Serial.println(IP);
-#endif
 
 while(!bme.begin()){}
 
@@ -605,10 +597,7 @@ if(!kuadej)
 //izmeri ter vrne vrednost na mikrofonu
 uint16_t hrup()
 {
-  digitalWrite(TR_LDR_ON,0);
-  digitalWrite(TR_MIC_ON,1);
-  delay(10);
-  return(analogRead(ESP_ANALOG));
+  return(analogRead(MIC_ANALOG));
 }
 //#########################################################
 
@@ -618,10 +607,8 @@ uint16_t hrup()
 //izmeri ter vrne vrednost na LDR uporu
 uint16_t osvetljenost()
 {
-  digitalWrite(TR_MIC_ON,0);
-  digitalWrite(TR_LDR_ON,1);
-  delay(10);
-  return(analogRead(ESP_ANALOG));
+
+  return(analogRead(LDR_ANALOG));
 }
 //##################################################
 
@@ -661,15 +648,19 @@ ALTITUDE = povprecja[6][kazalec];
 }
 //#################################################
 
+
+//################################
 void srvr()
 {
-AsyncWebServer server(80);
-
 
 
 WiFi.softAP(ssid, password);
 IPAddress IP = WiFi.softAPIP();
 
+#if DEBUG
+Serial.print("AP IP address: ");
+Serial.println(IP);
+#endif
 
   // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -714,10 +705,7 @@ IPAddress IP = WiFi.softAPIP();
   // Start server
   server.begin();
 
-
-
 }
-
 
 String processor(const String& var) {
   if (var == "TEMPERATURE") {
