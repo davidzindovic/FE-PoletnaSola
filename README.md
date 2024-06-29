@@ -16,7 +16,7 @@ Meritev lahko prikažemo na telefonu (če je naprava napajana preko kabla in pol
 
 Za zatemnitev ekrana (uporabno pri merjenju osvetljenosti) je potrebno sočasno pritisniti tipki MODE in A.
 
-#######################################################################################################
+###############################
 
 ENG: Product description
 
