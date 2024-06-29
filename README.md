@@ -35,4 +35,4 @@ The measurement can be displayed on the phone (if the device is powered via a ca
 To dim the screen (useful when measuring illumination) it is necessary to simultaneously press the MODE and A keys.
 
 
-![alt text](https://github.com/davidzindovic/FE-PoletnaSola/blob/main/IMG_9334.jpg?raw=true)
+![alt text](https://github.com/davidzindovic/GREEN_NUDGE-SummerSchool-Measuring_Device/blob/main/IMG_9334.jpg?raw=true)
