@@ -32,10 +32,10 @@
 #define LCD_REFRESH_TIME 150
 #define MERITVE_REFRESH_TIME 1000
 
-#define DEBUG 1
+#define DEBUG 0
 
-const char* ssid     = "FE-Summer-School-1";
-const char* password = "grasak1234";
+const char* ssid     = "GREEN-NUDGE-X";
+const char* password = "ALUO-FE-X";
 
 //html variables:
 float TEMPERATURE = 0.0;
@@ -288,23 +288,6 @@ else if((TIPKE==mask_wifi_publish)&&(window_pointer))
   lcd.setCursor(0,1);
   lcd.print("published!");
 
-  
-  //if(wifi_publish(velicine[izbrana_velicina],povprecja[izbrana_velicina][kazalec]))
-  //{
-  //lcd.clear();
-  //lcd.setCursor(0,0);
-  //lcd.print("Successfully");
-  //lcd.setCursor(0,1);
-  //lcd.print("published!");
-  //}
-  //else
-  //{
-  //lcd.clear();
-  //lcd.setCursor(0,0);
-  //lcd.print("Failed to");
-  //lcd.setCursor(0,1);
-  //lcd.print("publish :(");
-  //}
 }
 //če pritisnemo tipki A in B sočasno shranimo
 //meritev, ki je v trenutku pritiska prikazana na zaslonu
@@ -595,9 +578,17 @@ if(!kuadej)
 
 //ta funkcija odpre primeren tranzistor in
 //izmeri ter vrne vrednost na mikrofonu
+
 uint16_t hrup()
 {
-  return(analogRead(MIC_ANALOG));
+  const uint16_t tisina=2040;
+  //const uint16_t tisina_wiggle=50;
+  const uint16_t hrup_minimum_db=10; //ne bo tišje od dihanja verjetno
+  const uint16_t najvecji_pricakovan_odmik=1200;
+  const uint16_t hrup_max_db=90;
+  uint16_t hrup=analogRead(MIC_ANALOG);
+  uint16_t hrup_output=(abs(tisina-hrup))/najvecji_pricakovan_odmik*(hrup_max_db-hrup_minimum_db)+hrup_minimum_db;
+  return(hrup_output);
 }
 //#########################################################
 
@@ -606,9 +597,18 @@ uint16_t hrup()
 //ta funkcija odpre primeren tranzistor in
 //izmeri ter vrne vrednost na LDR uporu
 uint16_t osvetljenost()
-{
+{ //problem so LED od modulov -> faljena meritev
+  const uint16_t ldr_vcc=3.3;
+  const uint16_t pullup_upor=100000;
+  const uint16_t upornost_lux_min=50000;
+  const uint16_t upornost_lux_max=5000;
+  const uint16_t lux_min=0.01; //polna luna
+  const uint16_t lux_max=10000;//sončna svetloba, ne direkt sonce
 
-  return(analogRead(LDR_ANALOG));
+  uint16_t lux_rn=analogRead(LDR_ANALOG);
+  uint16_t trenutna_ldr_upornost=pullup_upor/(ldr_vcc/map(lux_rn,0,4095,0,ldr_vcc)-1);
+  uint16_t lux_output=map(trenutna_ldr_upornost,upornost_lux_min,upornost_lux_max,lux_min,lux_max);
+  return(lux_output);
 }
 //##################################################
 
