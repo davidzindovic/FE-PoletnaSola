@@ -33,3 +33,6 @@ The measurement can be saved by simultaneously pressing the B and A keys. After 
 The measurement can be displayed on the phone (if the device is powered via a cable and phone charger, computer...) by simultaneously pressing the MODE and B keys. After the measurements have been successfully published, the message "Successfully published!" will appear on the screen. To clear the message the B key must be pressed. To view the measurements, you need to connect to the wifi of the device with the name "GREEN-NUDGE-X", where X is the number of your device, which is written on the case. The connection password is "ALUO-FE-X", where X is again your device number. After the connection (which will not have internet), open the browser and type "192.168.4.1" as the link. After that you should get the measurements.
 
 To dim the screen (useful when measuring illumination) it is necessary to simultaneously press the MODE and A keys.
+
+
+![alt text](https://github.com/davidzindovic/FE-PoletnaSola/blob/main/IMG_9334.PNG?raw=true)
