@@ -16,11 +16,11 @@
 #define SEALEVELPRESSURE_HPA (1013.25)
 
 #define TIPKA_MODE 27
-#define TIPKA_A 26
-#define TIPKA_B 25
+#define TIPKA_A 33
+#define TIPKA_B 26
 
 #define LDR_ANALOG 36
-#define MIC_ANALOG 39
+#define MIC_ANALOG 39 
 
 #define WIFI_ON_PIN 4
 
@@ -163,6 +163,7 @@ String velicine[ST_VELICIN-1]={"Loudness: ","Humidity: ","Bright: ","Temp: ","Pr
 String enote[ST_VELICIN-1]={"dB","%","lx","C","hPa","k","m"};
 
 uint8_t kazalec=0; //da vem katera meritva je bila zadnja
+bool wifi=0;
 
 byte stopinje[8] = {
   0b01100,
@@ -280,6 +281,8 @@ else if((TIPKE==mask_wifi_publish)&&(window_pointer))
   lcd.setCursor(0, 0);
   lcd.print("Publishing...");
 
+  if(wifi)
+  {
   wifi_publish();
   delay(100); //da zgleda proper
   lcd.clear();
@@ -287,7 +290,20 @@ else if((TIPKE==mask_wifi_publish)&&(window_pointer))
   lcd.print("Successfully");
   lcd.setCursor(0,1);
   lcd.print("published!");
+  delay(500);
+  }
 
+  else
+  {
+  delay(100); //da zgleda proper
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Can't publish,");
+  lcd.setCursor(0,1);
+  lcd.print("not plugged in.");
+  delay(500);
+  }
+  
 }
 //če pritisnemo tipki A in B sočasno shranimo
 //meritev, ki je v trenutku pritiska prikazana na zaslonu
@@ -581,13 +597,13 @@ if(!kuadej)
 
 uint16_t hrup()
 {
-  const uint16_t tisina=2040;
+   uint16_t tisina=2040; //vrednost brez zvokov
   //const uint16_t tisina_wiggle=50;
-  const uint16_t hrup_minimum_db=10; //ne bo tišje od dihanja verjetno
-  const uint16_t najvecji_pricakovan_odmik=1200;
-  const uint16_t hrup_max_db=90;
+   uint16_t hrup_minimum_db=15; //probavu da bo v sobi cca 30
+   uint16_t najvecji_pricakovan_odmik=1200;
+   uint16_t hrup_max_db=90;
   uint16_t hrup=analogRead(MIC_ANALOG);
-  uint16_t hrup_output=(abs(tisina-hrup))/najvecji_pricakovan_odmik*(hrup_max_db-hrup_minimum_db)+hrup_minimum_db;
+  float hrup_output=(abs(tisina-hrup))*(hrup_max_db-hrup_minimum_db)/najvecji_pricakovan_odmik+hrup_minimum_db;
   return(hrup_output);
 }
 //#########################################################
@@ -598,16 +614,16 @@ uint16_t hrup()
 //izmeri ter vrne vrednost na LDR uporu
 uint16_t osvetljenost()
 { //problem so LED od modulov -> faljena meritev
-  const uint16_t ldr_vcc=3.3;
-  const uint16_t pullup_upor=100000;
-  const uint16_t upornost_lux_min=50000;
-  const uint16_t upornost_lux_max=5000;
-  const uint16_t lux_min=0.01; //polna luna
-  const uint16_t lux_max=10000;//sončna svetloba, ne direkt sonce
+   float ldr_vcc=3.3;
+   float pullup_upor=100000;
+   uint16_t upornost_lux_min=100000;
+   uint16_t upornost_lux_max=1000;
+   uint16_t lux_min=0.01; //polna luna
+   uint16_t lux_max=10000;//sončna svetloba, ne direkt sonce
 
   uint16_t lux_rn=analogRead(LDR_ANALOG);
-  uint16_t trenutna_ldr_upornost=pullup_upor/(ldr_vcc/map(lux_rn,0,4095,0,ldr_vcc)-1);
-  uint16_t lux_output=map(trenutna_ldr_upornost,upornost_lux_min,upornost_lux_max,lux_min,lux_max);
+  float trenutna_ldr_upornost=abs(-pullup_upor/(1-(ldr_vcc/(lux_rn*ldr_vcc/2/4095+0.001))));
+  float lux_output=(1-(trenutna_ldr_upornost/upornost_lux_min))*lux_max+lux_min;
   return(lux_output);
 }
 //##################################################
@@ -621,13 +637,13 @@ static uint8_t tipke_cajt=0;
 bool return_flag=0;
 static uint8_t tipke_prej;
 
-uint8_t tipke=(digitalRead(TIPKA_MODE)<<2)|(digitalRead(TIPKA_A)<<1)|(digitalRead(TIPKA_B)<<0);
+uint8_t tipke=(digitalRead(TIPKA_MODE)<<2)|(digitalRead(TIPKA_B)<<1)|(digitalRead(TIPKA_A)<<0);
 
 if((tipke_prej>tipke)&&((millis()-tipke_cajt)>TIPKE_TIME_THRESHOLD)){return_flag=1;tipke_cajt=millis();}
 
 tipke_prej=tipke;
 
-if(return_flag)return (0b111-((digitalRead(TIPKA_MODE)<<2)|(digitalRead(TIPKA_A)<<1)|(digitalRead(TIPKA_B)<<0)));
+if(return_flag)return (0b111-((digitalRead(TIPKA_MODE)<<2)|(digitalRead(TIPKA_B)<<1)|(digitalRead(TIPKA_A)<<0)));
 else return 0;
 }
 //###################################################
@@ -704,6 +720,7 @@ Serial.println(IP);
 
   // Start server
   server.begin();
+  wifi=1;
 
 }
 
